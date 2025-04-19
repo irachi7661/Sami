@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>লাইভ চ্যানেল</title>
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script src="https://unpkg.com/@videojs/http-streaming@3.8.0/dist/videojs-http-streaming.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 95vh;
+        }
+        .video-container {
+            width: 90%;
+            max-width: 960px; /* ভিডিওর সর্বোচ্চ প্রস্থ */
+            background-color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .video-js {
+            width: 100%; /* কন্টেইনারের সম্পূর্ণ প্রস্থ ব্যবহার করবে */
+            height: auto; /* উচ্চতা স্বয়ংক্রিয়ভাবে সমন্বয় করবে */
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .status {
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: #555;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <h1>লাইভ টিভি চ্যানেল</h1>
+        <video
+            id="live-player"
+            class="video-js vjs-default-skin vjs-big-play-centered"
+            controls
+            preload="auto"
+            width="640"
+            height="360"
+            data-setup='{}'>
+            <source src="/static/hls/live.m3u8" type="application/x-mpegURL">
+            <p class="vjs-no-js">
+                ভিডিওটি দেখতে, অনুগ্রহ করে জাভাস্ক্রিপ্ট সক্রিয় করুন, এবং একটি আধুনিক ব্রাউজার ব্যবহার করুন যা
+                <a href="https://videojs.com/html5-video-support/" target="_blank">HTML5 ভিডিও সমর্থন করে</a>।
+            </p>
+        </video>
+        <div id="status-message" class="status">স্ট্রীম লোড হচ্ছে...</div>
+    </div>
+
+    <script>
+        const player = videojs('live-player', {
+             // Options if needed
+        });
+
+        // স্ট্রীম শুরু করার চেষ্টা
+        player.ready(() => {
+            player.play().catch(error => {
+                console.warn("Autoplay blocked or failed:", error);
+                // যদি অটোপ্লে ব্লক হয়, ব্যবহারকারীকে প্লে বাটনে ক্লিক করতে হবে
+                document.getElementById('status-message').innerText = "প্লে বাটনে ক্লিক করুন।";
+            });
+        });
+
+        player.on('error', function() {
+            const error = player.error();
+            console.error('Video.js Error:', error);
+            if (error && error.code === 4) { // MEDIA_ERR_SRC_NOT_SUPPORTED or network error
+                 // নেটওয়ার্ক বা সোর্স সমস্যা হলে কিছুক্ষণ পর আবার চেষ্টা করা যেতে পারে
+                 document.getElementById('status-message').innerText = "স্ট্রীম এখনও উপলব্ধ নয় বা সংযোগ সমস্যা। কিছুক্ষণ পর আবার চেষ্টা করা হবে...";
+                 // কিছুক্ষণ পর প্লেলিস্ট চেক করার জন্য টাইমার সেট করতে পারেন
+                 setTimeout(checkStream, 5000); // ৫ সেকেন্ড পর চেক করবে
+            } else {
+                 document.getElementById('status-message').innerText = "ভিডিও প্লে করতে সমস্যা হচ্ছে।";
+            }
+        });
+
+        player.on('playing', function() {
+             document.getElementById('status-message').innerText = "লাইভ স্ট্রীম চলছে...";
+        });
+
+        player.on('waiting', function() {
+            document.getElementById('status-message').innerText = "বাফারিং...";
+        });
+
+        // M3U8 ফাইলটি উপলব্ধ কিনা তা পরীক্ষা করার ফাংশন
+        function checkStream() {
+            fetch('/static/hls/live.m3u8')
+                .then(response => {
+                    if (!response.ok) {
+                        console.log('HLS playlist not found yet. Retrying...');
+                        document.getElementById('status-message').innerText = "স্ট্রীম প্রস্তুত হচ্ছে...";
+                        setTimeout(checkStream, 5000); // আবার চেষ্টা করুন
+                    } else {
+                        // প্লেলিস্ট পাওয়া গেলে প্লেয়ারকে রিলোড বা সোর্স সেট করতে বলতে পারেন
+                        console.log('HLS playlist found. Attempting to load player.');
+                        if (player.currentSrc() !== window.location.origin + '/static/hls/live.m3u8') {
+                             player.src({ src: '/static/hls/live.m3u8', type: 'application/x-mpegURL' });
+                        }
+                        player.load(); // সোর্স রিলোড করুন
+                        player.play().catch(e => console.warn("Play failed after check:", e));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking stream:', error);
+                    document.getElementById('status-message').innerText = "স্ট্রীম চেক করতে সমস্যা হচ্ছে।";
+                    setTimeout(checkStream, 7000); // একটু বেশি সময় পর আবার চেষ্টা করুন
+                });
+        }
+
+        // প্রাথমিক চেক
+        // পেজ লোডের কিছুক্ষণ পর চেক শুরু করা ভালো হতে পারে, যাতে সার্ভার প্রস্তুত হতে পারে
+        setTimeout(checkStream, 3000); // ৩ সেকেন্ড পর প্রথম চেক
+
+    </script>
+</body>
+</html>
