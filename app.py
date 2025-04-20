@@ -10,7 +10,7 @@ from flask_cors import CORS
 from collections import deque # ভিডিও কিউয়ের জন্য
 
 # --- কনফিগারেশন ---
-DEFAULT_VIDEO_URL = "https://www.dropbox.com/scl/fi/2w5ai1fda804zfruoj8yn/assets_staytuned0.ts?rlkey=jixrs4b1v3keu4q6hpebmbw5v&st=b1teebao&raw=1"
+DEFAULT_VIDEO_URL = "https://www.dropbox.com/scl/fi/kw2rpr2vsl7hf9gaddtsg/VID_20250330_041149_786.mp4?rlkey=rb347g41y8r0ekqvu3vea2znp&st=xtb6m8gx&raw=1"
 DEFAULT_VIDEO_FILENAME = "default_video.ts" # ডিফল্ট ভিডিওর জন্য একটি নির্দিষ্ট নাম
 
 VIDEO_DIR = "videos" # ডাউনলোড করা ভিডিওগুলো এখানে থাকবে
