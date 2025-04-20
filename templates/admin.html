@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>অ্যাডমিন প্যানেল - লাইভ স্ট্রিম</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: calc(100% - 22px); padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #5cb85c; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #4cae4c; }
+        button.danger { background-color: #d9534f; }
+        button.danger:hover { background-color: #c9302c; }
+        ul { list-style: none; padding: 0; }
+        li { background: #eee; margin-bottom: 5px; padding: 8px 12px; border-radius: 4px; font-size: 0.9em; word-wrap: break-word; }
+        .status, .played-list { margin-top: 20px; padding: 15px; background-color: #e9e9e9; border-radius: 4px; }
+        .flash-message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .flash-success { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
+        .flash-error { background-color: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>লাইভ স্ট্রিম অ্যাডমিন প্যানেল</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="status">
+            <strong>বর্তমান অবস্থা:</strong> {{ current_status }}
+        </div>
+
+        <hr>
+
+        <h2>ভিডিও যোগ করুন</h2>
+        <form action="{{ url_for('add_video') }}" method="post" class="form-group">
+            <label for="video_url">ভিডিও URL:</label>
+            <input type="text" id="video_url" name="video_url" required placeholder="https://.../video.mp4">
+            <button type="submit">কিউতে যোগ করুন</button>
+        </form>
+
+        <hr>
+
+        <h2>প্লে-লিস্ট কিউ (Queue)</h2>
+        {% if queue %}
+            <ul>
+                {% for url in queue %}
+                    <li>{{ loop.index }}. {{ url }}</li>
+                {% endfor %}
+            </ul>
+            <form action="{{ url_for('clear_queue') }}" method="post" style="margin-top: 10px;">
+                <button type="submit" class="danger" onclick="return confirm('আপনি কি নিশ্চিত যে কিউ খালি করতে চান?');">কিউ খালি করুন</button>
+            </form>
+        {% else %}
+            <p>ভিডিও কিউ বর্তমানে খালি। কিউ খালি থাকলে ডিফল্ট ভিডিও প্লে হবে।</p>
+        {% endif %}
+
+         <hr>
+
+        <div class="played-list">
+            <h2>আজকে চালানো হয়েছে (অ্যাপ রিস্টার্ট হলে রিসেট হবে):</h2>
+             {% if played %}
+                <ul>
+                    {% for url in played %}
+                        <li>{{ url }}</li>
+                    {% endfor %}
+                </ul>
+                 <form action="{{ url_for('clear_played') }}" method="post" style="margin-top: 10px;">
+                    <button type="submit" class="danger" onclick="return confirm('আপনি কি নিশ্চিত যে \'আজকে চালানো হয়েছে\' তালিকা খালি করতে চান?');">তালিকা খালি করুন</button>
+                </form>
+            {% else %}
+                <p>আজকে এখনো কোনো ভিডিও (কিউ থেকে) চালানো হয়নি।</p>
+            {% endif %}
+        </div>
+
+    </div>
+</body>
+</html>
