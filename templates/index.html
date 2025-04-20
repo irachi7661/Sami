@@ -1,60 +1,96 @@
 <!DOCTYPE html>
-<html lang="bn"> <head>
+<html lang="bn">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>লাইভ চ্যানেল</title>
-    <link href="https://vjs.zencdn.net/7.17.0/video-js.css" rel="stylesheet" />
-    <script src="https://vjs.zencdn.net/lang/bn.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/clappr@latest/dist/clappr.min.js"></script>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; margin: 0; }
-        .video-container { text-align: center; width: 90%; max-width: 800px; /* একটি সর্বোচ্চ প্রস্থ সেট করা হলো */}
-        h1 { margin-bottom: 20px; color: #333; }
-        /* প্লেয়ারকে রেসপন্সিভ করার জন্য */
-        .video-js { width: 100%; height: auto; }
+        /* বেসিক রিসেট এবং বডি স্টাইল */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; /* আধুনিক ফন্ট ব্যবহার */
+            margin: 0;
+            padding: 0;
+            /* প্রিমিয়াম গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড */
+            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+            color: #f0f0f0; /* হালকা টেক্সট কালার */
+            min-height: 100vh; /* পুরো ভিউপোর্ট উচ্চতা */
+            overflow-x: hidden; /* অনুভূমিক স্ক্রোলবার এড়ানো */
+        }
+
+        /* শিরোনাম স্টাইল */
+        h1 {
+            text-align: center;
+            padding: 30px 20px 20px 20px; /* উপরে বেশি প্যাডিং, পাশে কম */
+            margin: 0;
+            font-size: 2.5em; /* বড় ফন্ট সাইজ */
+            font-weight: 300; /* হালকা ফন্ট ওয়েট */
+            color: #e0e0e0; /* একটু হালকা ধূসর */
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5); /* হালকা শ্যাডো */
+        }
+
+        /* ক্ল্যাপার প্লেয়ার র‍্যাপার স্টাইল */
+        .player-wrapper {
+            position: relative;
+            width: 95%; /* প্রস্থ একটু বাড়ানো */
+            max-width: 1100px; /* সর্বোচ্চ প্রস্থ বাড়ানো */
+            aspect-ratio: 16/9;
+            margin: 20px auto 40px auto; /* উপরে-নিচে মার্জিন, অটো ডানে-বামে (সেন্টার) */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); /* আকর্ষণীয় শ্যাডো */
+            border-radius: 8px; /* হালকা গোলাকার কোণ */
+            overflow: hidden; /* শ্যাডোর জন্য এবং কন্টেন্ট মাস্কিং */
+        }
+
+        /* প্লেয়ার এলিমেন্ট স্টাইল */
+        #player {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none; /* কোনো বর্ডার নেই */
+            /* প্লেয়ারের ডিফল্ট স্টাইল যেন ওভাররাইড না হয় */
+        }
+
+         /* ছোট স্ক্রীনের জন্য রেসপন্সিভ ডিজাইন */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+                padding: 20px 15px 15px 15px;
+            }
+            .player-wrapper {
+                width: 98%; /* ছোট স্ক্রিনে প্রায় পুরো প্রস্থ */
+                max-width: none; /* সর্বোচ্চ প্রস্থ সীমাবদ্ধতা অপসারণ */
+                margin: 15px auto 30px auto;
+                border-radius: 4px; /* কোণগুলো একটু কম গোলাকার */
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+            }
+        }
+         @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5em;
+            }
+         }
+
     </style>
 </head>
 <body>
-    <div class="video-container">
-        <h1>লাইভ স্ট্রিমিং</h1>
-        <video
-            id="live-video"
-            class="video-js vjs-default-skin vjs-big-play-centered"
-            controls preload="auto"
-            width="640" height="360" data-setup='{"fluid": true, "language": "bn"}' autoplay muted   >
-            <source src="/stream/stream.m3u8" type="application/x-mpegURL">
-            <p class="vjs-no-js">
-                ভিডিওটি দেখতে অনুগ্রহ করে জাভাস্ক্রিপ্ট চালু করুন, এবং একটি আধুনিক ব্রাউজার ব্যবহার করুন যা HTML5 ভিডিও সমর্থন করে।
-                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
-            </p>
-        </video>
+    <h1>লাইভ স্ট্রিমিং</h1>
+
+    <div class="player-wrapper">
+        <div id="player"></div>
     </div>
 
-    <script src="https://vjs.zencdn.net/7.17.0/video.min.js"></script>
     <script>
-        var player = videojs('live-video');
-
-        // প্লেয়ার প্রস্তুত হলে কিছু কাজ করা যেতে পারে (যদি প্রয়োজন হয়)
-        player.ready(function() {
-            console.log("প্লেয়ার প্রস্তুত এবং ভাষা:", player.language());
-            // অটো প্লে নিশ্চিত করার চেষ্টা (মিউট করা থাকলে কাজ করার সম্ভাবনা বেশি)
-            var promise = player.play();
-            if (promise !== undefined) {
-                promise.catch(error => {
-                    console.warn("অটো প্লে সম্ভব হয়নি:", error);
-                    // এখানে আপনি ব্যবহারকারীকে প্লে বাটনে ক্লিক করতে বলতে পারেন
-                });
-            }
+        // ক্ল্যাপার প্লেয়ার ইনিশিয়ালাইজেশন (কোনো পরিবর্তন করা হয়নি)
+        const player = new Clappr.Player({
+            parentId: "#player",
+            source: "/stream/stream.m3u8",
+            autoPlay: true,
+            mute: false,
+            width: "100%",
+            height: "100%",
         });
-
-        // লাইভ স্ট্রিমের জন্য কিছু অতিরিক্ত কনফিগারেশন (অপশনাল)
-        player.tech(true).on('retryplaylist', function() {
-          console.log('প্লেলিস্ট পুনরায় লোড করার চেষ্টা চলছে...');
-        });
-
-        player.on('error', function() {
-          console.error('প্লেয়ারে ত্রুটি:', player.error());
-        });
-
     </script>
 </body>
 </html>
