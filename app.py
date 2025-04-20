@@ -61,58 +61,81 @@ def get_safe_filename(url):
 def download_video(url, output_filename, event_to_set=None):
     """একটি ভিডিও ডাউনলোড করে এবং ঐচ্ছিকভাবে একটি ইভেন্ট সেট করে"""
     filepath = os.path.join(VIDEO_DIR, output_filename)
-    success = False
+    download_successful = False # ডাউনলোড সফল হয়েছে কিনা ট্র্যাক করার জন্য
+
     try:
+        # চেক করুন ফাইলটি আগে থেকেই আছে কিনা এবং খালি নয়
         if os.path.exists(filepath) and os.path.getsize(filepath) > 0 and output_filename != DEFAULT_VIDEO_FILENAME:
             logging.info(f"'{output_filename}' আগে থেকেই আছে এবং খালি নয়। ডাউনলোড স্কিপ করা হলো।")
-            success = True
-            return filepath
+            download_successful = True # যেহেতু ফাইল আছে, সফল ধরা যায়
+            return filepath # ফাইল পাথ রিটার্ন করুন
 
         logging.info(f"ডাউনলোড শুরু হচ্ছে: {url[:80]}... -> {filepath}")
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, stream=True, timeout=30, headers=headers, allow_redirects=True)
-        response.raise_for_status()
+        response.raise_for_status() # HTTP ত্রুটি চেক করুন
 
+        # ভিডিও ডাউনলোড লুপ
         with open(filepath, "wb") as f:
             downloaded_size = 0
-            for chunk in response.iter_content(chunk_size=8192 * 2): # Increased chunk size
+            for chunk in response.iter_content(chunk_size=8192 * 2):
                 if stop_event.is_set():
                     logging.warning("অ্যাপ বন্ধ হওয়ার সিগন্যালের কারণে ডাউনলোড বাতিল করা হয়েছে।")
-                    if os.path.exists(filepath): os.remove(filepath)
-                    return None
+                    # আংশিক ফাইল এখানেই মুছে ফেলা ভালো
+                    if os.path.exists(filepath):
+                        try: os.remove(filepath)
+                        except OSError as e: logging.error(f"বাতিল ডাউনলোডের ফাইল মুছতে সমস্যা ({filepath}): {e}")
+                    return None # None রিটার্ন করে ফাংশন শেষ করুন
                 if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
+        # ডাউনলোড লুপ শেষ
 
+        # ডাউনলোড শেষে ফাইলের সাইজ চেক করুন
         if downloaded_size == 0:
-            logging.warning(f"ডাউনলোড সম্পন্ন হয়েছে কিন্তু ফাইলের সাইজ ০ ({filepath})।")
-            if os.path.exists(filepath): os.remove(filepath)
-            return None
+            logging.warning(f"ডাউনলোড সম্পন্ন হয়েছে কিন্তু ফাইলের সাইজ ০ ({filepath})। ফাইল মুছে ফেলা হচ্ছে।")
+            if os.path.exists(filepath):
+                try: os.remove(filepath)
+                except OSError as e: logging.error(f"০ বাইট ফাইল মুছতে সমস্যা ({filepath}): {e}")
+            return None # ফাইলের সাইজ ০ হলে None রিটার্ন করুন
 
+        # যদি কোড এই পর্যন্ত আসে, তার মানে ডাউনলোড সফল হয়েছে
         logging.info(f"সফলভাবে ডাউনলোড হয়েছে: {output_filename} (Size: {downloaded_size / (1024*1024):.2f} MB)")
-        success = True
-        return filepath
+        download_successful = True
+        return filepath # সফল হলে ফাইলের পাথ রিটার্ন করুন
 
     except requests.exceptions.Timeout:
         logging.error(f"❌ ভিডিও ডাউনলোড টাইমআউট ({url[:80]}...)")
+        # ব্যর্থ হলে ফাইল মুছুন (যদি তৈরি হয়ে থাকে)
+        if os.path.exists(filepath):
+            try: os.remove(filepath)
+            except OSError as e: logging.error(f"টাইমআউট ফাইল মুছতে সমস্যা ({filepath}): {e}")
+        return None # 실패하면 None 반환
     except requests.exceptions.RequestException as e:
         logging.error(f"❌ ভিডিও ডাউনলোড ব্যর্থ ({url[:80]}...): {e}")
+        # ব্যর্থ হলে ফাইল মুছুন
+        if os.path.exists(filepath):
+            try: os.remove(filepath)
+            except OSError as e: logging.error(f"ব্যর্থতার ফাইল মুছতে সমস্যা ({filepath}): {e}")
+        return None # 실패하면 None 반환
     except Exception as e:
+        # অন্যান্য অপ্রত্যাশিত ত্রুটি
         logging.error(f"❌ ভিডিও সংরক্ষণ বা অন্য কোনো ত্রুটি ({url[:80]}...): {e}")
+        # ব্যর্থ হলে ফাইল মুছুন
+        if os.path.exists(filepath):
+            try: os.remove(filepath)
+            except OSError as e: logging.error(f"ত্রুটির ফাইল মুছতে সমস্যা ({filepath}): {e}")
+        return None # 실패하면 None 반환
 
-    # ডাউনলোড ব্যর্থ হলে আংশিক ফাইল মুছুন
-    if os.path.exists(filepath) and not success:
-         try:
-             os.remove(filepath)
-         except OSError as e:
-             logging.error(f"ব্যর্থ ডাউনলোডের ফাইল মুছতে সমস্যা ({filepath}): {e}")
-    return None
-
+    # finally ব্লকটি try/except কাঠামোর ঠিক পরেই আসবে
     finally:
         # ডাউনলোড সফল হোক বা ব্যর্থ, সংশ্লিষ্ট ইভেন্ট সেট করুন (যদি দেওয়া থাকে)
+        # এটি নিশ্চিত করে যে ম্যানেজার থ্রেড জানতে পারে ডাউনলোড প্রচেষ্টা শেষ হয়েছে
         if event_to_set:
+            logging.debug(f"Setting completion event for {url[:80]}...")
             event_to_set.set()
-
+        # finally ব্লকের মধ্যে কোনো return স্টেটমেন্ট থাকা উচিত নয়,
+        # কারণ এটি try/except ব্লকের return/exception কে ওভাররাইড করতে পারে।
 def background_download_task(url, output_path, completion_event):
     """ব্যাকগ্রাউন্ডে একটি ভিডিও ডাউনলোড করার টাস্ক"""
     thread_name = threading.current_thread().name
