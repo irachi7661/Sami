@@ -9,6 +9,7 @@ from flask import Flask, render_template, send_from_directory, abort, request, r
 from flask_cors import CORS
 from collections import deque # ভিডিও কিউয়ের জন্য
 import traceback # বিস্তারিত এরর লগিং এর জন্য
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode # URL পার্সিং এর জন্য
 
 # --- কনফিগারেশন ---
 DEFAULT_VIDEO_URL = "https://www.dropbox.com/scl/fi/2w5ai1fda804zfruoj8yn/assets_staytuned0.ts?rlkey=jixrs4b1v3keu4q6hpebmbw5v&st=b1teebao&raw=1"
@@ -37,22 +38,77 @@ os.makedirs(STREAM_OUTPUT_DIR, exist_ok=True)
 
 # --- Helper Functions ---
 
+def ensure_dropbox_raw_param(url):
+    """
+    URL টি Dropbox লিঙ্ক হলে এবং শেষে raw=1 না থাকলে তা যোগ করে।
+    """
+    try:
+        if not url or not (url.startswith('http://') or url.startswith('https://')):
+            return url # অবৈধ বা খালি URL হলে কিছু না করে ফেরত দিন
+
+        parsed_url = urlparse(url)
+
+        # হোস্টনেম চেক (www.dropbox.com বা dropbox.com)
+        if parsed_url.netloc.lower() == 'www.dropbox.com' or parsed_url.netloc.lower() == 'dropbox.com':
+            query_params = parse_qs(parsed_url.query) # বর্তমান কোয়েরি প্যারামিটার পার্স করুন
+
+            # raw=1 আছে কিনা চেক করুন
+            if not ('raw' in query_params and query_params['raw'] == ['1']):
+                print(f"🔧 Dropbox URL সনাক্ত হয়েছে, 'raw=1' যোগ করা হচ্ছে: {url[:80]}...")
+                query_params['raw'] = ['1'] # raw=1 যোগ বা আপডেট করুন
+
+                # নতুন কোয়েরি স্ট্রিং তৈরি করুন
+                new_query = urlencode(query_params, doseq=True)
+
+                # সম্পূর্ণ URL আবার তৈরি করুন
+                modified_url = urlunparse((
+                    parsed_url.scheme,
+                    parsed_url.netloc,
+                    parsed_url.path,
+                    parsed_url.params,
+                    new_query,
+                    parsed_url.fragment
+                ))
+                print(f"   -> পরিবর্তিত URL: {modified_url[:80]}...")
+                return modified_url
+            else:
+                 # raw=1 আগে থেকেই আছে
+                 return url
+        else:
+            # Dropbox URL নয়
+            return url
+    except Exception as e:
+        print(f"⚠️ URL '{url[:80]}...' পার্স বা মডিফাই করার সময় ত্রুটি: {e}")
+        return url # ত্রুটি হলে আসল URL ফেরত দিন
+
+
 def get_safe_filename(url):
     """URL থেকে একটি নিরাপদ ফাইলের নাম তৈরি করে (হ্যাশ ব্যবহার করে)"""
-    hashed_url = hashlib.sha1(url.encode()).hexdigest()[:10] # URL এর হ্যাশ
+    # Note: Ensure this function uses the *original* or modified URL as intended
+    # For filename generation, often only the path matters, so using urlparse is good
     try:
-        base_name = os.path.basename(url.split('?')[0])
+        parsed_url = urlparse(url)
+        path_part = parsed_url.path
+        base_name = os.path.basename(path_part)
         _, ext = os.path.splitext(base_name)
+
+        # Use SHA1 hash of the *full* URL (including query params) for uniqueness
+        hashed_url = hashlib.sha1(url.encode()).hexdigest()[:10]
+
         if not ext or len(ext) > 5:
              ext = '.mp4' # ডিফল্ট এক্সটেনশন
-    except Exception:
-        ext = '.mp4' # এরর হলে ডিফল্ট
 
-    # গ্রহণযোগ্য ভিডিও এক্সটেনশন চেক
-    if ext.lower() not in ['.mp4', '.ts', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m3u8']:
-         ext = '.mp4' # অগ্রহণযোগ্য হলে ডিফল্ট
+        # গ্রহণযোগ্য ভিডিও এক্সটেনশন চেক
+        if ext.lower() not in ['.mp4', '.ts', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m3u8']:
+             ext = '.mp4' # অগ্রহণযোগ্য হলে ডিফল্ট
 
-    return f"video_{hashed_url}{ext}"
+        return f"video_{hashed_url}{ext}"
+    except Exception as e:
+        print(f"⚠️ ফাইলের নাম তৈরিতে সমস্যা ({url[:50]}...): {e}. একটি জেনেরিক নাম ব্যবহার করা হচ্ছে।")
+        # Fallback to hashing the raw url if parsing fails
+        hashed_url = hashlib.sha1(url.encode()).hexdigest()[:10]
+        return f"video_{hashed_url}.mp4"
+
 
 def download_video(url, output_filename):
     """একটি ভিডিও ডাউনলোড করে নির্দিষ্ট ফাইলে সংরক্ষণ করে"""
@@ -62,7 +118,7 @@ def download_video(url, output_filename):
         if os.path.exists(filepath):
             try:
                 if os.path.getsize(filepath) > 0:
-                    print(f"ℹ️ '{output_filename}' আগে থেকেই ডাউনলোড করা আছে এবং খালি নয়। ডাউনলোড করা হচ্ছে না।")
+                    print(f"ℹ️ '{output_filename}' ({url[:50]}...) আগে থেকেই ডাউনলোড করা আছে এবং খালি নয়।")
                     return filepath
                 else:
                     print(f"⚠️ '{output_filename}' আগে থেকেই ছিল কিন্তু খালি। আবার ডাউনলোড করা হচ্ছে।")
@@ -77,11 +133,16 @@ def download_video(url, output_filename):
 
         # Content-Type চেক (সম্ভাব্য নন-ভিডিও ফাইল সনাক্ত করার চেষ্টা)
         content_type = response.headers.get('content-type', '').lower()
+        # Dropbox raw links often give 'application/octet-stream' or 'video/mp4'
         problematic_types = ['text/html', 'application/json'] # এগুলো ভিডিও হওয়ার সম্ভাবনা কম
         is_likely_video = 'video' in content_type or 'mpegurl' in content_type or 'octet-stream' in content_type or not any(ptype in content_type for ptype in problematic_types)
 
         if not is_likely_video:
-             print(f"⚠️ সতর্কতা: Content-Type '{content_type}' ভিডিও মনে হচ্ছে না ({url})। তবুও ডাউনলোড করার চেষ্টা করা হচ্ছে...")
+             print(f"⚠️ সতর্কতা: Content-Type '{content_type}' ভিডিও মনে হচ্ছে না ({url[:80]}...) । ডাউনলোড করার চেষ্টা করা হচ্ছে...")
+             # Dropbox HTML preview page might have content-type 'text/html'.
+             # If url doesn't have raw=1, this might happen.
+             if 'dropbox.com' in url and 'raw=1' not in url:
+                 print(f"   -> এটি Dropbox লিঙ্ক কিন্তু 'raw=1' নেই। সম্ভবত HTML পেজ ডাউনলোড হবে।")
 
         # ফাইল লেখা
         with open(filepath, "wb") as f:
@@ -105,19 +166,19 @@ def download_video(url, output_filename):
         return filepath
 
     except requests.exceptions.Timeout:
-        print(f"❌ ভিডিও ডাউনলোড টাইমআউট ({url})")
+        print(f"❌ ভিডিও ডাউনলোড টাইমআউট ({url[:80]}...)")
         if os.path.exists(filepath): os.remove(filepath) # ব্যর্থ হলে ফাইল ডিলিট
         return None
     except requests.exceptions.SSLError as e:
-        print(f"❌ SSL ত্রুটি ({url}): {e}")
+        print(f"❌ SSL ত্রুটি ({url[:80]}...): {e}")
         if os.path.exists(filepath): os.remove(filepath)
         return None
     except requests.exceptions.RequestException as e:
-        print(f"❌ ভিডিও ডাউনলোড ব্যর্থ ({url}): {e}")
+        print(f"❌ ভিডিও ডাউনলোড ব্যর্থ ({url[:80]}...): {e}")
         if os.path.exists(filepath): os.remove(filepath)
         return None
     except Exception as e:
-        print(f"❌ ভিডিও সংরক্ষণ বা অন্য কোনো ত্রুটি ({url}): {e}")
+        print(f"❌ ভিডিও সংরক্ষণ বা অন্য কোনো ত্রুটি ({url[:80]}...): {e}")
         if os.path.exists(filepath): os.remove(filepath)
         return None
 
@@ -146,8 +207,8 @@ def stop_ffmpeg_stream():
                 print(f"⚠️ FFmpeg (PID: {process_to_stop.pid}) বন্ধ করার সময় ত্রুটি: {e}")
         elif process_to_stop:
              print("ℹ️ FFmpeg প্রসেস বন্ধ করার চেষ্টা করার সময় দেখা গেলো এটি আগে থেকেই বন্ধ ছিল।")
-        else:
-             print("ℹ️ কোনো FFmpeg প্রসেস বন্ধ করার জন্য পাওয়া যায়নি।")
+        # else:
+             # print("ℹ️ কোনো FFmpeg প্রসেস বন্ধ করার জন্য পাওয়া যায়নি।") # খুব বেশি ভার্বোস হতে পারে
 
         # গ্লোবাল ভেরিয়েবল আপডেট
         if current_ffmpeg_process == process_to_stop:
@@ -167,20 +228,23 @@ def start_ffmpeg_stream(video_path, loop=False):
         return None
 
     # চলমান প্রসেস থাকলে বন্ধ করুন (নিরাপত্তার জন্য)
-    print("   -> শুরু করার আগে পুরনো FFmpeg প্রসেস (যদি থাকে) বন্ধ করা হচ্ছে...")
+    # print("   -> শুরু করার আগে পুরনো FFmpeg প্রসেস (যদি থাকে) বন্ধ করা হচ্ছে...")
     stop_ffmpeg_stream()
-    time.sleep(0.2) # বন্ধ হওয়ার জন্য একটু সময় দিন
+    # time.sleep(0.2) # বন্ধ হওয়ার জন্য একটু সময় দিন - stop_ffmpeg_stream is blocking, so maybe not needed
 
     # পুরাতন সেগমেন্ট ফাইল মুছে ফেলা
     print(f"   -> পুরনো HLS সেগমেন্ট ফাইল মুছে ফেলা হচ্ছে ({STREAM_OUTPUT_DIR})...")
     try:
         if os.path.exists(STREAM_OUTPUT_DIR):
+             deleted_count = 0
              for f in os.listdir(STREAM_OUTPUT_DIR):
                  if f.endswith('.ts') or f.endswith('.m3u8'):
                      try:
                          os.remove(os.path.join(STREAM_OUTPUT_DIR, f))
+                         deleted_count += 1
                      except OSError as e:
                          print(f"⚠️ পুরনো সেগমেন্ট মুছতে সমস্যা: {e}")
+             # if deleted_count > 0: print(f"      -> {deleted_count} টি পুরনো সেগমেন্ট ফাইল মোছা হয়েছে।")
         else:
              os.makedirs(STREAM_OUTPUT_DIR, exist_ok=True)
     except Exception as e:
@@ -209,6 +273,10 @@ def start_ffmpeg_stream(video_path, loop=False):
         '-ac', '2',         # স্টেরিও অডিও চ্যানেল
         '-ar', '44100',     # অডিও স্যাম্পল রেট
 
+        # ইনপুট বা ডিকোড সংক্রান্ত ত্রুটি উপেক্ষা করার চেষ্টা (সাবধানতার সাথে ব্যবহার করুন)
+        '-err_detect', 'ignore_err',
+        '-ignore_unknown', # অজানা স্ট্রিম উপেক্ষা করুন
+
         # HLS আউটপুট অপশনস
         '-f', 'hls',                     # আউটপুট ফরম্যাট HLS
         '-hls_time', '4',                # সেগমেন্ট দৈর্ঘ্য (সেকেন্ড)
@@ -224,6 +292,7 @@ def start_ffmpeg_stream(video_path, loop=False):
 
     try:
         # DEVNULL stdout ব্যবহার করে টার্মিনাল ক্ল্যাটার কমানো
+        # stderr কে PIPE করা হয়েছে যাতে লগিং থ্রেড এটি পড়তে পারে
         process = subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
 
         # stderr লগিং এর জন্য আলাদা থ্রেড (শুধুমাত্র এরর দেখানোর জন্য)
@@ -235,15 +304,16 @@ def start_ffmpeg_stream(video_path, loop=False):
                         line_str = line.decode('utf-8', errors='replace').strip()
                         if line_str:
                              # '-c copy' ব্যবহার করার সময় কিছু warning স্বাভাবিক, যেমন timestamp বা keyframe সংক্রান্ত
-                             if 'warning' in line_str.lower() or 'error' in line_str.lower() or 'failed' in line_str.lower():
+                             # শুধুমাত্র গুরুত্বপূর্ণ এরর বা ওয়ার্নিং লগ করা যেতে পারে
+                             if 'error' in line_str.lower() or 'failed' in line_str.lower() or 'invalid' in line_str.lower() or 'warning' in line_str.lower():
                                 print(f"  [FFmpeg stderr - {os.path.basename(path)}]: {line_str}")
                              # else: # ডিবাগিং এর জন্য সব লাইন দেখতে চাইলে এটি আনকমেন্ট করুন
-                             #    print(f"  [FFmpeg stderr - {os.path.basename(path)}]: {line_str}")
+                             #    pass # print(f"  [FFmpeg stderr - {os.path.basename(path)}]: {line_str}")
                 except Exception as e:
                      print(f"⚠️ FFmpeg stderr পড়তে সমস্যা: {e}")
                 finally:
                      if proc.stderr: proc.stderr.close() # stderr বন্ধ করুন
-            print(f"  [FFmpeg stderr রিডিং থ্রেড শেষ - {os.path.basename(path)}]")
+            # print(f"  [FFmpeg stderr রিডিং থ্রেড শেষ - {os.path.basename(path)}]") # খুব বেশি ভার্বোস হতে পারে
 
         stderr_thread = threading.Thread(target=log_stderr, args=(process, video_path), daemon=True)
         stderr_thread.start()
@@ -274,45 +344,50 @@ def stream_manager():
     global currently_playing_url, default_video_path, current_ffmpeg_process
 
     print("⏳ ডিফল্ট ভিডিও ডাউনলোড করার চেষ্টা চলছে...")
-    temp_default_path = download_video(DEFAULT_VIDEO_URL, DEFAULT_VIDEO_FILENAME)
+    # ডিফল্ট ভিডিওর URL ও প্রয়োজনে মডিফাই করুন (যদিও এটিতে raw=1 আছে)
+    modified_default_url = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
+    temp_default_path = download_video(modified_default_url, DEFAULT_VIDEO_FILENAME)
     if temp_default_path:
          default_video_path = temp_default_path
-         print(f"✅ ডিফল্ট ভিডিও প্রস্তুত: {default_video_path}")
+         print(f"✅ ডিফল্ট ভিডিও প্রস্তুত: {default_video_path} (URL: {modified_default_url[:50]}...)")
     else:
-         print("🚨 সতর্কতা: ডিফল্ট ভিডিও ডাউনলোড করা যায়নি! ডিফল্ট প্লেব্যাক কাজ করবে না।")
+         print(f"🚨 সতর্কতা: ডিফল্ট ভিডিও ({modified_default_url[:50]}...) ডাউনলোড করা যায়নি! ডিফল্ট প্লেব্যাক কাজ করবে না।")
 
     predownload_attempted_for_url = None # কোন URL প্রি-ডাউনলোডের চেষ্টা করা হয়েছে
 
     while not stop_event.is_set():
         next_video_path = None
-        play_url = None
+        play_url = None # এটি হবে মডিফাইড URL যা প্লে করা হবে
         loop_default = False
         stop_default_and_process_queue = False # ডিফল্ট ভিডিও চলার সময় কিউতে আইটেম এলে এটি True হবে
 
         try:
             with stream_lock: # এক্সেস করার আগে লক নিন
                 ffmpeg_is_running = current_ffmpeg_process and current_ffmpeg_process.poll() is None
-                current_url_snapshot = currently_playing_url # বর্তমান অবস্থা কপি করুন
+                current_url_snapshot = currently_playing_url # বর্তমান অবস্থা কপি করুন (এটিও মডিফাইড URL হবে)
 
                 # --- ডিসিশন লজিক ---
 
                 # 1. FFmpeg চলছে?
                 if ffmpeg_is_running:
                     # 1a. কিউ ভিডিও চলছে এবং কিউতে আরও আইটেম আছে? পরেরটা প্রি-ডাউনলোড করুন
-                    if current_url_snapshot != DEFAULT_VIDEO_URL and video_queue:
-                        next_url_in_queue = video_queue[0]
-                        if next_url_in_queue != predownload_attempted_for_url:
-                            print(f"🔎 প্রি-ডাউনলোডের জন্য চেক করা হচ্ছে: {next_url_in_queue[:80]}...")
-                            next_filename = get_safe_filename(next_url_in_queue)
-                            downloaded_path = download_video(next_url_in_queue, next_filename)
+                    modified_default_url_snapshot = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
+                    if current_url_snapshot != modified_default_url_snapshot and video_queue:
+                        next_url_in_queue_raw = video_queue[0] # কিউ থেকে আসল (বা মডিফাইড) URL নিন
+                        next_url_in_queue_modified = ensure_dropbox_raw_param(next_url_in_queue_raw) # প্রি-ডাউনলোডের জন্য মডিফাই করুন
+
+                        if next_url_in_queue_modified != predownload_attempted_for_url:
+                            print(f"🔎 প্রি-ডাউনলোডের জন্য চেক করা হচ্ছে: {next_url_in_queue_modified[:80]}...")
+                            next_filename = get_safe_filename(next_url_in_queue_modified) # Use modified URL for filename consistency
+                            downloaded_path = download_video(next_url_in_queue_modified, next_filename) # Use modified URL for download
                             if downloaded_path:
                                 print(f"👍 প্রি-ডাউনলোড সম্পন্ন বা ফাইল আগে থেকেই আছে: {next_filename}")
                             else:
-                                print(f"👎 প্রি-ডাউনলোড ব্যর্থ: {next_url_in_queue[:80]}...")
-                            predownload_attempted_for_url = next_url_in_queue # চেষ্টা করা হয়েছে বলে মার্ক করুন
+                                print(f"👎 প্রি-ডাউনলোড ব্যর্থ: {next_url_in_queue_modified[:80]}...")
+                            predownload_attempted_for_url = next_url_in_queue_modified # চেষ্টা করা হয়েছে বলে মার্ক করুন (মডিফাইড URL দিয়ে)
 
                     # 1b. ডিফল্ট ভিডিও চলছে কিন্তু কিউতে নতুন আইটেম এসেছে? ডিফল্ট বন্ধ করতে হবে
-                    elif current_url_snapshot == DEFAULT_VIDEO_URL and video_queue:
+                    elif current_url_snapshot == modified_default_url_snapshot and video_queue:
                         print("🔄 ডিফল্ট ভিডিও চলছিল, কিন্তু কিউতে নতুন আইটেম এসেছে। ডিফল্ট বন্ধ করা হচ্ছে...")
                         stop_default_and_process_queue = True
                         predownload_attempted_for_url = None # প্রি-ডাউনলোড রিসেট
@@ -320,7 +395,7 @@ def stream_manager():
                     # 1c. অন্যান্য ক্ষেত্রে (কিউ ভিডিও চলছে কিন্তু কিউ খালি, অথবা ডিফল্ট চলছে ও কিউ খালি): কিছু করার নেই
                     else:
                         # কিউ খালি হলে প্রি-ডাউনলোড রিসেট
-                        if current_url_snapshot != DEFAULT_VIDEO_URL and not video_queue:
+                        if current_url_snapshot != modified_default_url_snapshot and not video_queue:
                             predownload_attempted_for_url = None
                         pass # শুধু অপেক্ষা করুন
 
@@ -330,34 +405,38 @@ def stream_manager():
                     # 2a. আগের প্রসেস শেষ হয়েছে কিনা চেক করুন
                     if current_ffmpeg_process and current_ffmpeg_process.poll() is not None:
                         print(f"🏁 FFmpeg (PID: {current_ffmpeg_process.pid}) স্বাভাবিকভাবে শেষ হয়েছে।")
-                        if current_url_snapshot and current_url_snapshot != DEFAULT_VIDEO_URL:
-                             played_today.add(current_url_snapshot) # প্লে করা লিস্টে যোগ করুন
+                        modified_default_url_snapshot = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
+                        if current_url_snapshot and current_url_snapshot != modified_default_url_snapshot:
+                             # played_today তে মডিফাইড URL যোগ করা হচ্ছে
+                             played_today.add(current_url_snapshot)
                         current_ffmpeg_process = None # প্রসেস রিসেট
                         currently_playing_url = None # URL রিসেট
 
                     # 2b. কিউতে ভিডিও আছে?
                     if video_queue:
-                        play_url = video_queue.popleft() # প্রথম আইটেমটি নিন
-                        print(f"▶️ অ্যাডমিন কিউ থেকে নেওয়া হয়েছে: {play_url[:80]}...")
-                        filename = get_safe_filename(play_url)
-                        next_video_path = download_video(play_url, filename) # ডাউনলোড করুন
+                        raw_url_from_queue = video_queue.popleft() # প্রথম আইটেমটি নিন
+                        play_url = ensure_dropbox_raw_param(raw_url_from_queue) # প্লে করার আগে মডিফাই করুন
+                        print(f"▶️ অ্যাডমিন কিউ থেকে নেওয়া হয়েছে (মডিফাইড): {play_url[:80]}...")
+                        filename = get_safe_filename(play_url) # Use modified URL for filename
+                        next_video_path = download_video(play_url, filename) # ডাউনলোড করুন (মডিফাইড URL দিয়ে)
                         if not next_video_path:
                             print(f"❌ ডাউনলোড ব্যর্থ (প্লে করার জন্য): {play_url[:80]}... এটি স্কিপ করা হলো।")
                             play_url = None # প্লে করা যাবে না
                             currently_playing_url = None # URL রিসেট
                         else:
                              loop_default = False # কিউ ভিডিও লুপ হয় না
-                             currently_playing_url = play_url # বর্তমান URL সেট করুন
+                             currently_playing_url = play_url # বর্তমান URL সেট করুন (মডিফাইড URL)
 
                     # 2c. কিউ খালি কিন্তু ডিফল্ট ভিডিও আছে?
                     elif default_video_path:
+                        modified_default_url_snapshot = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
                         # যদি আগেরবার অন্য ভিডিও চলছিল, তবেই মেসেজ দেখান
-                        if current_url_snapshot != DEFAULT_VIDEO_URL:
+                        if current_url_snapshot != modified_default_url_snapshot:
                              print("ℹ️ অ্যাডমিন কিউ খালি। ডিফল্ট ভিডিও প্লে করা হবে (লুপ সহ)।")
                         next_video_path = default_video_path
-                        play_url = DEFAULT_VIDEO_URL
+                        play_url = modified_default_url_snapshot # ডিফল্ট URL (মডিফাইড)
                         loop_default = True # ডিফল্ট ভিডিও লুপ হবে
-                        currently_playing_url = play_url # বর্তমান URL সেট করুন
+                        currently_playing_url = play_url # বর্তমান URL সেট করুন (মডিফাইড URL)
 
                     # 2d. কিউ খালি এবং ডিফল্ট ভিডিও নেই?
                     else:
@@ -386,7 +465,7 @@ def stream_manager():
                              currently_playing_url = None
                              print(f"⚠️ ব্যর্থ URL '{play_url[:80]}...' প্লে করা গেলো না।")
                  # নতুন প্রসেস শুরু হলে কিছুক্ষণ অপেক্ষা করুন চালু হওয়ার জন্য
-                time.sleep(0.5)
+                # time.sleep(0.5) # start_ffmpeg_stream is blocking until process starts
 
             # --- অপেক্ষা ---
             # FFmpeg চললে অল্প সময় পর পর চেক করুন
@@ -418,6 +497,7 @@ def stream_manager():
     # থ্রেড বন্ধ হওয়ার আগে নিশ্চিত করুন FFmpeg বন্ধ হয়েছে
     stop_ffmpeg_stream()
 
+
 # --- Flask Routes ---
 
 # HTML প্লেয়ার পেজ
@@ -429,20 +509,27 @@ def index():
 @app.route('/admin')
 def admin_panel():
     with stream_lock: # ডেটা পড়ার সময়ও লক ব্যবহার করুন
+        # দেখানোর জন্য কিউয়ের URL গুলোকেও ensure_dropbox_raw_param দিয়ে চালানো যেতে পারে
+        # অথবা আসল URL দেখানো ভালো? এখানে আসল URL দেখাচ্ছি।
         queue_snapshot = list(video_queue)
+        # প্লে হওয়া তালিকাতে মডিফাইড URL থাকে, সেটাই দেখাচ্ছি
         played_snapshot = list(played_today)
+        # বর্তমানে প্লে হওয়া URL (মডিফাইড)
         current_url_snapshot = currently_playing_url
         is_ffmpeg_running = current_ffmpeg_process and current_ffmpeg_process.poll() is None
         status_detail = ""
         if is_ffmpeg_running and video_queue:
-            next_in_queue = video_queue[0]
-            status_detail = f" | এরপর কিউতে: {next_in_queue[:50]}..."
+            next_in_queue_raw = video_queue[0]
+            # স্ট্যাটাসে আসল URL দেখানো যেতে পারে
+            status_detail = f" | এরপর কিউতে: {next_in_queue_raw[:50]}..."
 
+    modified_default_url = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
     if is_ffmpeg_running:
-        mode = "[ভিডিও কপি]" if current_url_snapshot != DEFAULT_VIDEO_URL else "(লুপ)"
-        if current_url_snapshot == DEFAULT_VIDEO_URL:
+        mode = "[ভিডিও কপি]" if current_url_snapshot != modified_default_url else "(লুপ)"
+        if current_url_snapshot == modified_default_url:
             current_status = f"ডিফল্ট ভিডিও চলছে {mode}{status_detail}"
         elif current_url_snapshot:
+            # স্ট্যাটাসে মডিফাইড URL দেখানো হচ্ছে
             current_status = f"চলছে: {current_url_snapshot[:80]}... {mode}{status_detail}"
         else:
             current_status = "একটি ভিডিও চলছে (URL অজানা)" # যদি কোনোভাবে URL null হয়ে যায়
@@ -452,23 +539,26 @@ def admin_panel():
              current_status += f" | প্লে করার অপেক্ষায়: {video_queue[0][:50]}..."
 
     return render_template('admin.html',
-                           queue=queue_snapshot,
-                           current_status=current_status,
-                           played=played_snapshot)
+                           queue=queue_snapshot, # আসল URL দেখাচ্ছে
+                           current_status=current_status, # মডিফাইড URL দেখাচ্ছে
+                           played=played_snapshot) # মডিফাইড URL দেখাচ্ছে
 
 # HTML ফর্ম থেকে ভিডিও যোগ
 @app.route('/admin/add', methods=['POST'])
 def add_video_form():
-    url = request.form.get('video_url', '').strip()
-    if url:
-        if url.startswith('http://') or url.startswith('https://'):
+    url_from_form = request.form.get('video_url', '').strip()
+    if url_from_form:
+        if url_from_form.startswith('http://') or url_from_form.startswith('https://'):
+            # --- Dropbox URL মডিফিকেশন ---
+            url_to_add = ensure_dropbox_raw_param(url_from_form)
+            # ---------------------------
             with stream_lock:
-                if url in video_queue:
-                     flash(f'"{url[:50]}..." এই URL টি ইতিমধ্যে কিউতে আছে।', 'warning')
+                if url_to_add in video_queue:
+                     flash(f'"{url_to_add[:50]}..." এই URL টি ইতিমধ্যে কিউতে আছে (সম্ভবত raw=1 সহ)।', 'warning')
                 else:
-                    video_queue.append(url)
-                    print(f"📥 [অ্যাডমিন] কিউতে যোগ করা হয়েছে: {url}")
-                    flash(f'"{url[:50]}..." সফলভাবে কিউতে যোগ করা হয়েছে।', 'success')
+                    video_queue.append(url_to_add)
+                    print(f"📥 [অ্যাডমিন] কিউতে যোগ করা হয়েছে: {url_to_add}")
+                    flash(f'"{url_to_add[:50]}..." সফলভাবে কিউতে যোগ করা হয়েছে।', 'success')
             return redirect(url_for('admin_panel'))
         else:
             flash('অবৈধ URL! অনুগ্রহ করে http:// বা https:// দিয়ে শুরু হওয়া একটি URL দিন।', 'error')
@@ -505,23 +595,30 @@ def clear_played_form():
 # API: ভিডিও যোগ করা (GET)
 @app.route('/add', methods=['GET'])
 def add_video_api():
-    url = request.args.get('link', '').strip()
-    if not url:
+    url_from_request = request.args.get('link', '').strip()
+    if not url_from_request:
         print("❌ [API Add] ব্যর্থ: 'link' প্যারামিটার পাওয়া যায়নি।")
         return jsonify({'status': 'error', 'message': 'Missing "link" parameter.'}), 400 # Bad Request
 
-    if not (url.startswith('http://') or url.startswith('https://')):
-        print(f"❌ [API Add] ব্যর্থ: অবৈধ URL ফরম্যাট ({url[:50]}...)")
-        return jsonify({'status': 'error', 'message': 'Invalid URL format. Must start with http:// or https://', 'url': url}), 400 # Bad Request
+    if not (url_from_request.startswith('http://') or url_from_request.startswith('https://')):
+        print(f"❌ [API Add] ব্যর্থ: অবৈধ URL ফরম্যাট ({url_from_request[:50]}...)")
+        return jsonify({'status': 'error', 'message': 'Invalid URL format. Must start with http:// or https://', 'url': url_from_request}), 400 # Bad Request
+
+    # --- Dropbox URL মডিফিকেশন ---
+    url_to_add = ensure_dropbox_raw_param(url_from_request)
+    # ---------------------------
 
     with stream_lock:
-        if url in video_queue:
-            print(f"⚠️ [API Add] ইতিমধ্যে কিউতে আছে: {url[:80]}...")
-            return jsonify({'status': 'warning', 'message': 'Video already in queue.', 'url': url}), 200 # OK কিন্তু ওয়ার্নিং
+        # মডিফাইড URL ব্যবহার করে চেক করুন
+        if url_to_add in video_queue:
+            print(f"⚠️ [API Add] ইতিমধ্যে কিউতে আছে: {url_to_add[:80]}...")
+            # উত্তরে আসল রিকোয়েস্ট করা URL বা মডিফাইড URL দেখানো যেতে পারে, এখানে মডিফাইড দেখাচ্ছি
+            return jsonify({'status': 'warning', 'message': 'Video already in queue.', 'url': url_to_add, 'original_url': url_from_request}), 200 # OK কিন্তু ওয়ার্নিং
         else:
-            video_queue.append(url)
-            print(f"✅ [API Add] কিউতে যোগ করা হয়েছে: {url[:80]}...")
-            return jsonify({'status': 'success', 'message': 'Video added to queue.', 'url': url}), 200 # OK
+            # মডিফাইড URL কিউতে যোগ করুন
+            video_queue.append(url_to_add)
+            print(f"✅ [API Add] কিউতে যোগ করা হয়েছে: {url_to_add[:80]}...")
+            return jsonify({'status': 'success', 'message': 'Video added to queue.', 'url': url_to_add, 'original_url': url_from_request}), 200 # OK
 
 # API: ভিডিও ডিলিট করা (GET)
 @app.route('/delete', methods=['GET'])
@@ -546,26 +643,36 @@ def delete_video_api():
 
         # কেস ২: নির্দিষ্ট URL ডিলিট (/delete?link=URL)
         else:
-            url_to_delete = link_param
-            if not (url_to_delete.startswith('http://') or url_to_delete.startswith('https://')):
-                 print(f"❌ [API Delete] ব্যর্থ: ডিলিটের জন্য অবৈধ URL ফরম্যাট ({url_to_delete[:50]}...)")
-                 return jsonify({'status': 'error', 'message': 'Invalid URL format for deletion.', 'url': url_to_delete}), 400 # Bad Request
+            url_from_request = link_param
+            if not (url_from_request.startswith('http://') or url_from_request.startswith('https://')):
+                 print(f"❌ [API Delete] ব্যর্থ: ডিলিটের জন্য অবৈধ URL ফরম্যাট ({url_from_request[:50]}...)")
+                 return jsonify({'status': 'error', 'message': 'Invalid URL format for deletion.', 'url': url_from_request}), 400 # Bad Request
 
-            # চলছে এমন ভিডিও ডিলিট করা যাবে না
-            if url_to_delete == currently_playing_url and currently_playing_url != DEFAULT_VIDEO_URL:
+            # --- Dropbox URL মডিফিকেশন ---
+            # ডিলিট করার আগেও URL টি মডিফাই করে নিতে হবে, যাতে কিউয়ের সাথে মেলে
+            url_to_delete = ensure_dropbox_raw_param(url_from_request)
+            # ---------------------------
+
+            # মডিফাইড URL ব্যবহার করে বর্তমানে চলছে কিনা চেক করুন
+            current_playing_modified = ensure_dropbox_raw_param(currently_playing_url) if currently_playing_url else None
+            default_url_modified = ensure_dropbox_raw_param(DEFAULT_VIDEO_URL)
+
+            # Check if the URL to delete matches the currently playing URL AND it's not the default video
+            if url_to_delete == current_playing_modified and url_to_delete != default_url_modified:
                  print(f"❌ [API Delete] ব্যর্থ: বর্তমানে চলছে এমন ভিডিও ডিলিট করা যাবে না ({url_to_delete[:80]}...)")
-                 return jsonify({'status': 'error', 'message': 'Cannot delete the currently playing video.', 'url': url_to_delete}), 403 # Forbidden
+                 # উত্তরে আসল রিকোয়েস্ট করা URL বা মডিফাইড URL দেখানো যেতে পারে
+                 return jsonify({'status': 'error', 'message': 'Cannot delete the currently playing video.', 'url': url_to_delete, 'original_url': url_from_request}), 403 # Forbidden
 
-            # কিউ থেকে ডিলিট করার চেষ্টা
+            # মডিফাইড URL ব্যবহার করে কিউ থেকে ডিলিট করার চেষ্টা
             try:
-                # deque থেকে সরাসরি remove ব্যবহার করা যায়, ValueError দেয় যদি না পাওয়া যায়
                 video_queue.remove(url_to_delete)
                 print(f"✅ [API Delete] কিউ থেকে ডিলিট করা হয়েছে: {url_to_delete[:80]}...")
-                return jsonify({'status': 'success', 'message': 'Video removed from queue.', 'url': url_to_delete}), 200 # OK
+                return jsonify({'status': 'success', 'message': 'Video removed from queue.', 'url': url_to_delete, 'original_url': url_from_request}), 200 # OK
             except ValueError:
-                # যদি URL কিউতে না পাওয়া যায়
+                # যদি মডিফাইড URL কিউতে না পাওয়া যায়
                 print(f"❌ [API Delete] ব্যর্থ: ভিডিও কিউতে পাওয়া যায়নি ({url_to_delete[:80]}...)")
-                return jsonify({'status': 'error', 'message': 'Video not found in queue.', 'url': url_to_delete}), 404 # Not Found
+                return jsonify({'status': 'error', 'message': 'Video not found in queue.', 'url': url_to_delete, 'original_url': url_from_request}), 404 # Not Found
+
 
 # --- HLS স্ট্রিম পরিবেশন ---
 @app.route('/stream/<path:filename>')
@@ -608,7 +715,7 @@ def signal_handler(sig, frame):
     print("\n🚦 বন্ধ করার সিগন্যাল পাওয়া গেছে (Ctrl+C)...")
     stop_event.set() # সব থ্রেডকে বন্ধ হতে বলুন
     print("⏳ FFmpeg এবং ব্যাকগ্রাউন্ড থ্রেড বন্ধ করার জন্য অপেক্ষা করা হচ্ছে...")
-    time.sleep(0.5) # একটু সময় দিন অন্যান্য থ্রেডকে সিগন্যাল রিসিভ করতে
+    # time.sleep(0.5) # Stop event should be enough
 
     # সরাসরি FFmpeg বন্ধ করার চেষ্টা করুন যদি এটি এখনো চলে
     print("🚦 সিগন্যাল হ্যান্ডলার থেকে FFmpeg বন্ধ করার চেষ্টা...")
@@ -623,6 +730,7 @@ if __name__ == '__main__':
     print("*"*60)
     print("🚀 লাইভ স্ট্রিম অ্যাপ্লিকেশন শুরু হচ্ছে...")
     print("   ✨ মোড: ভিডিও কপি, অডিও এনকোড")
+    print("   🔧 বৈশিষ্ট্য: Dropbox URL-এ স্বয়ংক্রিয়ভাবে 'raw=1' যোগ করা হবে (প্রয়োজনে)")
     print(f"⏰ বর্তমান সময়: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"📂 ভিডিও ডাউনলোড ডিরেক্টরি: {os.path.abspath(VIDEO_DIR)}")
     print(f"📺 স্ট্রিম আউটপুট ডিরেক্টরি: {os.path.abspath(STREAM_OUTPUT_DIR)}")
