@@ -1,91 +1,236 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>অ্যাডমিন প্যানেল - লাইভ স্ট্রিম</title>
+    <title>Admin Panel - Live Stream</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
-        .container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1, h2 { text-align: center; color: #333; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"] { width: calc(100% - 120px); padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-right: 5px; }
-        button { padding: 10px 15px; background-color: #5cb85c; color: white; border: none; border-radius: 4px; cursor: pointer; vertical-align: middle; }
-        button:hover { background-color: #4cae4c; }
-        button.danger { background-color: #d9534f; }
-        button.danger:hover { background-color: #c9302c; }
-        ul { list-style: decimal; padding-left: 20px; margin-top: 10px; }
-        li { background: #eee; margin-bottom: 5px; padding: 8px 12px; border-radius: 4px; font-size: 0.9em; word-wrap: break-word; }
-        .status, .queue-section, .played-list { margin-top: 20px; padding: 15px; background-color: #e9e9e9; border-radius: 4px; }
-        .status strong, .queue-section h2, .played-list h2 { margin-top: 0; }
-        .flash-message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
-        .flash-success { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
-        .flash-error { background-color: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
-        hr { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+            max-width: 900px; /* কন্টেন্ট বেশি চওড়া হওয়া থেকে বিরত রাখে */
+            margin-left: auto;
+            margin-right: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0056b3; /* একটি হেডিং কালার */
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        h1 {
+            text-align: center;
+            margin-top: 0;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        form {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            border: 1px solid #ced4da;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="url"] {
+            width: calc(100% - 22px); /* প্যাডিং ও বর্ডার বিবেচনা করে */
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* প্যাডিং ও বর্ডার প্রস্থের অন্তর্ভুক্ত */
+        }
+        button[type="submit"] {
+            background-color: #007bff; /* প্রাইমারি বাটন কালার */
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        button[type="submit"]:hover {
+            background-color: #0056b3; /* হোভার ইফেক্ট */
+        }
+        /* ভিন্ন কাজের বাটনের জন্য ভিন্ন স্টাইল */
+        form.inline-form {
+            display: inline-block; /* বাটনগুলো পাশাপাশি রাখার জন্য */
+            margin-left: 10px;
+            padding: 0;
+            background: none;
+            border: none;
+        }
+        form.inline-form button {
+            background-color: #dc3545; /* ডেঞ্জার বাটন কালার (ডিলিট) */
+        }
+        form.inline-form button:hover {
+            background-color: #c82333;
+        }
+        /* 'আজকে প্লে হয়েছে' তালিকার ক্লিয়ার বাটনের জন্য অন্য রঙ */
+        form#clear-played-form button {
+             background-color: #ffc107; /* ওয়ার্নিং বাটন কালার */
+             color: #333;
+        }
+         form#clear-played-form button:hover {
+             background-color: #e0a800;
+         }
+
+        ul, ol {
+            padding-left: 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            max-height: 300px; /* তালিকা বেশি লম্বা হলে স্ক্রোলবার */
+            overflow-y: auto;
+        }
+        li {
+            margin-bottom: 8px;
+            word-break: break-all; /* লম্বা URL ভেঙে দেখাবে */
+            padding-right: 10px; /* স্ক্রোলবারের জন্য জায়গা */
+        }
+        .status-section, .queue-section, .played-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        /* ফ্ল্যাশ মেসেজ স্টাইল */
+        .flashes {
+            list-style-type: none;
+            padding: 0;
+            margin: 15px 0;
+        }
+        .flashes li {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+        }
+        .flashes li.success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .flashes li.error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .flashes li.warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+         .flashes li.info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between; /* হেডিং আর বাটন আলাদা করতে */
+            align-items: center; /* উল্লম্বভাবে মাঝখানে আনতে */
+            flex-wrap: wrap; /* ছোট স্ক্রিনে নিচে নেমে যাবে */
+        }
+        .section-header h2 {
+            margin-bottom: 0; /* বাটনের সাথে স্পেস কমাতে */
+            border-bottom: none; /* হেডিং এর নিচের বর্ডার বাদ */
+        }
+        .section-header form {
+             margin-bottom: 0; /* বাটনের নিচের মার্জিন বাদ */
+        }
+
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>লাইভ স্ট্রিম অ্যাডমিন প্যানেল</h1>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="flash-message flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+    <h1>Admin Panel - Live Stream</h1>
 
-        <div class="status">
-            <strong>বর্তমান অবস্থা:</strong> {{ current_status }}
-        </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class=flashes>
+        {% for category, message in messages %}
+          <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
 
-        <hr>
-
-        <h2>ভিডিও যোগ করুন</h2>
-        <form action="{{ url_for('add_video') }}" method="post" class="form-group">
-            <label for="video_url">ভিডিও URL:</label>
-            <input type="text" id="video_url" name="video_url" required placeholder="https://.../video.mp4">
-            <button type="submit">কিউতে যোগ করুন</button>
-        </form>
-
-        <hr>
-
-        <div class="queue-section">
-            <h2>প্লে-লিস্ট কিউ (Queue)</h2>
-            {% if queue %}
-                <ul>
-                    {% for url in queue %}
-                        <li>{{ url }}</li>
-                    {% endfor %}
-                </ul>
-                <form action="{{ url_for('clear_queue') }}" method="post" style="margin-top: 10px;">
-                    <button type="submit" class="danger" onclick="return confirm('আপনি কি নিশ্চিত যে কিউ খালি করতে চান? এটি চলমান প্রি-ডাউনলোডকেও প্রভাবিত করতে পারে।');">কিউ খালি করুন</button>
-                </form>
-            {% else %}
-                <p>ভিডিও কিউ বর্তমানে খালি।</p>
-            {% endif %}
-        </div>
-
-         <hr>
-
-        <div class="played-list">
-            <h2>আজকে চালানো হয়েছে:</h2>
-             {% if played %}
-                <ul>
-                    {% for url in played %}
-                        <li>{{ url }}</li>
-                    {% endfor %}
-                </ul>
-                 <form action="{{ url_for('clear_played') }}" method="post" style="margin-top: 10px;">
-                    <button type="submit" class="danger" onclick="return confirm('আপনি কি নিশ্চিত যে \'আজকে চালানো হয়েছে\' তালিকা খালি করতে চান?');">তালিকা খালি করুন</button>
-                </form>
-            {% else %}
-                <p>আজকে এখনো কোনো ভিডিও (কিউ থেকে) চালানো হয়নি।</p>
-            {% endif %}
-        </div>
-
+    <div class="status-section">
+        <h2>Current Status</h2>
+        <p id="status">{{ current_status }}</p>
     </div>
+
+    <div class="add-video-section">
+        <h2>Add Video to Queue</h2>
+        <form action="{{ url_for('add_video_form') }}" method="post">
+            <label for="video_url">Video URL:</label>
+            <input type="url" id="video_url" name="video_url" required size="60" placeholder="https://example.com/video.mp4 or other direct video link">
+            <button type="submit">Add Video</button>
+        </form>
+    </div>
+
+    <div class="queue-section">
+         <div class="section-header">
+             <h2>Video Queue ({{ queue|length }})</h2>
+             {% if queue %}
+             <form class="inline-form" action="{{ url_for('clear_queue_form') }}" method="post">
+                 <button type="submit" onclick="return confirm('Are you sure you want to clear the entire video queue?');">Clear Entire Queue</button>
+             </form>
+             {% endif %}
+         </div>
+
+        {% if queue %}
+            <ol>
+                {% for url in queue %}
+                    <li>{{ url }}</li>
+                {% endfor %}
+            </ol>
+        {% else %}
+            <p>The queue is currently empty.</p>
+        {% endif %}
+    </div>
+
+    <div class="played-section">
+         <div class="section-header">
+            <h2>Played Today ({{ played|length }})</h2>
+             {% if played %}
+             <form id="clear-played-form" class="inline-form" action="{{ url_for('clear_played_form') }}" method="post">
+                <button type="submit" onclick="return confirm('Are you sure you want to clear the list of played videos?');">Clear Played List</button>
+            </form>
+             {% endif %}
+         </div>
+
+        {% if played %}
+            <ul>
+                {% for url in played %}
+                    <li>{{ url }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No videos have finished playing from the queue yet today.</p>
+        {% endif %}
+    </div>
+
+    <hr>
+    <p style="text-align: center; font-size: 0.9em; color: #777;">
+        <a href="{{ url_for('index') }}" target="_blank">View Player</a> | Refresh this page to see updates.
+    </p>
+
 </body>
 </html>
