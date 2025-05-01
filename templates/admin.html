@@ -3,57 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - Live Stream</title>
+    <title>Stream Admin Panel</title>
     <style>
         body {
             font-family: sans-serif;
-            line-height: 1.6;
             margin: 20px;
             background-color: #f4f4f4;
             color: #333;
-            max-width: 900px; /* কন্টেন্ট বেশি চওড়া হওয়া থেকে বিরত রাখে */
-            margin-left: auto;
-            margin-right: auto;
-            padding: 20px;
-            border: 1px solid #ddd;
+        }
+        .container {
             background-color: #fff;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: auto;
         }
         h1, h2 {
-            color: #0056b3; /* একটি হেডিং কালার */
-            border-bottom: 2px solid #eee;
-            padding-bottom: 5px;
-            margin-top: 30px;
+            color: #555;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
         }
-        h1 {
-            text-align: center;
-            margin-top: 0;
+        .status {
+            background-color: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
         }
-        p {
-            margin-bottom: 15px;
+        .status p {
+            margin: 0;
+            font-weight: bold;
         }
         form {
             margin-bottom: 20px;
             padding: 15px;
-            background-color: #e9ecef;
-            border-radius: 5px;
-            border: 1px solid #ced4da;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input[type="url"] {
-            width: calc(100% - 22px); /* প্যাডিং ও বর্ডার বিবেচনা করে */
+        input[type="text"] {
+            width: calc(100% - 22px);
             padding: 10px;
             margin-bottom: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            box-sizing: border-box; /* প্যাডিং ও বর্ডার প্রস্থের অন্তর্ভুক্ত */
         }
-        button[type="submit"] {
-            background-color: #007bff; /* প্রাইমারি বাটন কালার */
+        button {
+            background-color: #5cb85c;
             color: white;
             padding: 10px 15px;
             border: none;
@@ -61,176 +63,129 @@
             cursor: pointer;
             font-size: 1em;
         }
-        button[type="submit"]:hover {
-            background-color: #0056b3; /* হোভার ইফেক্ট */
+        button:hover {
+            background-color: #4cae4c;
         }
-        /* ভিন্ন কাজের বাটনের জন্য ভিন্ন স্টাইল */
-        form.inline-form {
-            display: inline-block; /* বাটনগুলো পাশাপাশি রাখার জন্য */
-            margin-left: 10px;
-            padding: 0;
-            background: none;
-            border: none;
+        button.danger {
+            background-color: #d9534f;
         }
-        form.inline-form button {
-            background-color: #dc3545; /* ডেঞ্জার বাটন কালার (ডিলিট) */
+        button.danger:hover {
+            background-color: #c9302c;
         }
-        form.inline-form button:hover {
-            background-color: #c82333;
+        button.info {
+            background-color: #5bc0de;
         }
-        /* 'আজকে প্লে হয়েছে' তালিকার ক্লিয়ার বাটনের জন্য অন্য রঙ */
-        form#clear-played-form button {
-             background-color: #ffc107; /* ওয়ার্নিং বাটন কালার */
-             color: #333;
+        button.info:hover {
+            background-color: #31b0d5;
         }
-         form#clear-played-form button:hover {
-             background-color: #e0a800;
-         }
 
-        ul, ol {
-            padding-left: 20px;
-            background-color: #f8f9fa;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            padding-top: 10px;
-            padding-bottom: 10px;
-            max-height: 300px; /* তালিকা বেশি লম্বা হলে স্ক্রোলবার */
-            overflow-y: auto;
+        ul {
+            list-style: none;
+            padding: 0;
         }
         li {
-            margin-bottom: 8px;
-            word-break: break-all; /* লম্বা URL ভেঙে দেখাবে */
-            padding-right: 10px; /* স্ক্রোলবারের জন্য জায়গা */
-        }
-        .status-section, .queue-section, .played-section {
-            margin-bottom: 30px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
             background-color: #fff;
-        }
-        /* ফ্ল্যাশ মেসেজ স্টাইল */
-        .flashes {
-            list-style-type: none;
-            padding: 0;
-            margin: 15px 0;
-        }
-        .flashes li {
+            border: 1px solid #ddd;
             padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            word-wrap: break-word; /* Long URLs will wrap */
+        }
+        .empty-list {
+            color: #777;
+            font-style: italic;
+        }
+        .flash-messages {
+            padding: 0;
+            margin: 0 0 20px 0;
+            list-style: none;
+        }
+        .flash-messages li {
+            padding: 15px;
             margin-bottom: 10px;
             border-radius: 4px;
             border: 1px solid transparent;
         }
-        .flashes li.success {
-            color: #155724;
-            background-color: #d4edda;
-            border-color: #c3e6cb;
+        .flash-messages .success {
+            color: #3c763d;
+            background-color: #dff0d8;
+            border-color: #d6e9c6;
         }
-        .flashes li.error {
-            color: #721c24;
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
+        .flash-messages .error {
+            color: #a94442;
+            background-color: #f2dede;
+            border-color: #ebccd1;
         }
-        .flashes li.warning {
-            color: #856404;
-            background-color: #fff3cd;
-            border-color: #ffeeba;
+        .flash-messages .warning {
+            color: #8a6d3b;
+            background-color: #fcf8e3;
+            border-color: #faebcc;
         }
-         .flashes li.info {
-            color: #0c5460;
-            background-color: #d1ecf1;
-            border-color: #bee5eb;
+         .flash-messages .info {
+            color: #31708f;
+            background-color: #d9edf7;
+            border-color: #bce8f1;
         }
-        .section-header {
-            display: flex;
-            justify-content: space-between; /* হেডিং আর বাটন আলাদা করতে */
-            align-items: center; /* উল্লম্বভাবে মাঝখানে আনতে */
-            flex-wrap: wrap; /* ছোট স্ক্রিনে নিচে নেমে যাবে */
-        }
-        .section-header h2 {
-            margin-bottom: 0; /* বাটনের সাথে স্পেস কমাতে */
-            border-bottom: none; /* হেডিং এর নিচের বর্ডার বাদ */
-        }
-        .section-header form {
-             margin-bottom: 0; /* বাটনের নিচের মার্জিন বাদ */
-        }
-
     </style>
 </head>
 <body>
+    <div class="container">
+        <h1>Stream Admin Panel</h1>
 
-    <h1>Admin Panel - Live Stream</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <ul class=flashes>
-        {% for category, message in messages %}
-          <li class="{{ category }}">{{ message }}</li>
-        {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+        <div class="status">
+            <h2>Current Status</h2>
+            <p>{{ current_status }}</p>
+        </div>
 
-    <div class="status-section">
-        <h2>Current Status</h2>
-        <p id="status">{{ current_status }}</p>
-    </div>
-
-    <div class="add-video-section">
         <h2>Add Video to Queue</h2>
-        <form action="{{ url_for('add_video_form') }}" method="post">
+        <form action="{{ url_for('add_video_form') }}" method="POST">
             <label for="video_url">Video URL:</label>
-            <input type="url" id="video_url" name="video_url" required size="60" placeholder="https://example.com/video.mp4 or other direct video link">
+            <input type="text" id="video_url" name="video_url" placeholder="Enter video URL (http:// or https://)" required>
             <button type="submit">Add Video</button>
         </form>
-    </div>
 
-    <div class="queue-section">
-         <div class="section-header">
-             <h2>Video Queue ({{ queue|length }})</h2>
-             {% if queue %}
-             <form class="inline-form" action="{{ url_for('clear_queue_form') }}" method="post">
-                 <button type="submit" onclick="return confirm('Are you sure you want to clear the entire video queue?');">Clear Entire Queue</button>
-             </form>
-             {% endif %}
-         </div>
+        <h2>Video Queue</h2>
+        <div class="queue-section">
+            {% if queue %}
+                <ul>
+                    {% for url in queue %}
+                        <li>{{ url }}</li>
+                    {% endfor %}
+                </ul>
+                <form action="{{ url_for('clear_queue_form') }}" method="POST" style="margin-top: 15px; background: none; border: none; padding: 0;">
+                    <button type="submit" class="danger" onclick="return confirm('Are you sure you want to clear the entire queue?');">Clear Entire Queue</button>
+                </form>
+            {% else %}
+                <p class="empty-list">The video queue is currently empty.</p>
+            {% endif %}
+        </div>
 
-        {% if queue %}
-            <ol>
-                {% for url in queue %}
-                    <li>{{ url }}</li>
-                {% endfor %}
-            </ol>
-        {% else %}
-            <p>The queue is currently empty.</p>
-        {% endif %}
-    </div>
-
-    <div class="played-section">
-         <div class="section-header">
-            <h2>Played Today ({{ played|length }})</h2>
+        <h2>Played Today</h2>
+        <div class="played-section">
              {% if played %}
-             <form id="clear-played-form" class="inline-form" action="{{ url_for('clear_played_form') }}" method="post">
-                <button type="submit" onclick="return confirm('Are you sure you want to clear the list of played videos?');">Clear Played List</button>
-            </form>
-             {% endif %}
-         </div>
+                <ul>
+                    {% for url in played %}
+                        <li>{{ url }}</li>
+                    {% endfor %}
+                </ul>
+                <form action="{{ url_for('clear_played_form') }}" method="POST" style="margin-top: 15px; background: none; border: none; padding: 0;">
+                    <button type="submit" class="info" onclick="return confirm('Are you sure you want to clear the list of played videos?');">Clear Played List</button>
+                </form>
+            {% else %}
+                <p class="empty-list">No videos have been played from the queue today.</p>
+            {% endif %}
+        </div>
 
-        {% if played %}
-            <ul>
-                {% for url in played %}
-                    <li>{{ url }}</li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No videos have finished playing from the queue yet today.</p>
-        {% endif %}
     </div>
-
-    <hr>
-    <p style="text-align: center; font-size: 0.9em; color: #777;">
-        <a href="{{ url_for('index') }}" target="_blank">View Player</a> | Refresh this page to see updates.
-    </p>
-
 </body>
 </html>
